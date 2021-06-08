@@ -5,6 +5,8 @@ from pprint import pprint
 import json
 import argparse
 
+# Documentation for python API: https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/CustomObjectsApi.md
+
 
 def get_crds(api_instance):
     api_response = api_instance.list_custom_resource_definition() #label_selector='app=cert-manager'
@@ -38,8 +40,8 @@ def get_problematic_certificaterequests(api_instance, knamespace=None):
     for crs in resp['items']:
         crs_name        = crs['metadata']['name']
         crs_namespace   = crs['metadata']['namespace']
-        crs_status = "Unknown status"
-        crs_ok = False
+        crs_status      = "Unknown status"
+        crs_ok          = False
 
         if knamespace and knamespace != crs_namespace:
             continue    # only include objects from namespace set in params
@@ -55,6 +57,35 @@ def get_problematic_certificaterequests(api_instance, knamespace=None):
 
     return sorted(problematic_crs, key=lambda x: (x[0],x[1]))
 
+def get_orders_by_crs(order):
+    kgroup      = "acme.cert-manager.io"
+    kversion    = "v1"
+    kplural     = "orders"
+
+    api_instance = client.CustomObjectsApi(api_client)
+    orders = []
+
+    api_response = api_instance.list_cluster_custom_object(kgroup, kversion, kplural)
+    resp = dict(api_response.items())
+    print(resp)
+
+    return []
+
+    # for order in resp['items']:
+    #     order_name        = order['metadata']['name']
+    #     crs_status      = "Unknown status"
+    #     crs_ok          = False
+
+    #     if order.get('status'):
+    #         crs_reason  = order['status']['conditions'][0]['reason']
+    #         crs_msg     = order['status']['conditions'][0]['message']
+    #         crs_status  = f'{crs_reason}: ' + crs_msg
+    #         crs_ok      = (order['status']['conditions'][0]['status'] == 'True')
+        
+    #     if not crs_ok:
+    #         orders.append([order_name, crs_status])
+
+    # return sorted(orders, key=lambda x: (x[0],x[1]))
 
 if __name__ == '__main__':
     parsea = argparse.ArgumentParser()
@@ -67,7 +98,7 @@ if __name__ == '__main__':
     with client.ApiClient(configuration) as api_client:
         api_instance = client.ApiextensionsV1Api(api_client)
         
-        # Print Custom Resource Definition objects on the cluster:
+        # #Print Custom Resource Definition objects on the cluster:
         # try:
         #     h_col1 = 'CRD NAME'
         #     h_col2 = 'CRD\'s APP LABEL'
@@ -88,12 +119,25 @@ if __name__ == '__main__':
             h_col3 = 'STATUS'
             print(f'{h_col1:<20}{h_col2:<64}{h_col3}')
             for problem in problematic_crs:
-                cn      = problem[0]
-                cname   = problem[1]
+                cnamesp = problem[0]
+                crs     = problem[1]
                 creason = problem[2][:100]
-                print(f'{cn:<20}{cname:<64}{creason}')
+                print(f'{cnamesp:<20}{crs:<64}{creason}')
+
+            # print the Order for each problematic CRS. Orders are being created by CRS. Then Order is fullfilled and we have new Certificate.
+            # for crs in problematic_crs:
+            #     orders = get_orders_by_crs(crs[1])
+            #     break
+
         except ApiException as e:
             print("Exception when calling CustomObjectsApi->list_cluster_custom_object: %s\n" % e)
 
     # Automatic fixing of expired certs:
-    # find crs, cert, order and secret that come from the same crequest and delete them in following order: secret, cert, order, crs
+    # 1. find cerfificate requests that failed or have empty status
+    # 2. using label app.kubernetes.io/name= find a matching order
+    # 3. delete both certificate request and order (deletion order IS important, crs must be deleted first, 
+    #    otherwise new one will be created but not order and it will hang again)
+
+
+    #Order label: app.kubernetes.io/name=internal-bike-management-master
+    #Request label: app.kubernetes.io/name=internal-bike-management-master
